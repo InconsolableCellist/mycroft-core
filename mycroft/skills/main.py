@@ -216,7 +216,7 @@ class SkillManager(Thread):
                 res = p.returncode
                 # Always set next update to an hour from now if successful
                 if res == 0:
-                    self.next_download = time.time() + 60 * MINUTES
+                    self.next_download = time.time() + 1440 * MINUTES
 
                     if res == 0 and speak:
                         self.ws.emit(Message("speak", {'utterance':
