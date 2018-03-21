@@ -15,6 +15,7 @@
 import sys
 from threading import Thread, Lock
 
+from mycroft import dialog
 from mycroft.client.enclosure.api import EnclosureAPI
 from mycroft.client.speech.listener import RecognizerLoop
 from mycroft.configuration import Configuration
@@ -47,6 +48,12 @@ def handle_no_internet():
     ws.emit(Message('enclosure.notify.no_internet'))
 
 
+def handle_awoken():
+    """ Forward mycroft.awoken to the messagebus. """
+    LOG.info("Listener is now Awake: ")
+    ws.emit(Message('mycroft.awoken'))
+
+
 def handle_wakeword(event):
     LOG.info("Wakeword Detected: " + event['utterance'])
     ws.emit(Message('recognizer_loop:wakeword', event))
@@ -54,7 +61,15 @@ def handle_wakeword(event):
 
 def handle_utterance(event):
     LOG.info("Utterance: " + str(event['utterances']))
-    ws.emit(Message('recognizer_loop:utterance', event))
+    context = {'client_name': 'mycroft_listener'}
+    if 'ident' in event:
+        ident = event.pop('ident')
+        context['ident'] = ident
+    ws.emit(Message('recognizer_loop:utterance', event, context))
+
+
+def handle_unknown():
+    ws.emit(Message('mycroft.speech.recognition.unknown'))
 
 
 def handle_speak(event):
@@ -67,9 +82,10 @@ def handle_speak(event):
 def handle_complete_intent_failure(event):
     LOG.info("Failed to find intent.")
     # TODO: Localize
-    utterances = ["Sorry, I didn't catch that.", "Sorry, I don't understand.", "Huhm, can you repeat that?", "Can you repeat that?", "I don't understand.", "Huh, I don't understand.", "Huh, can you repeat that?", "Please repeat that.", "Sorry, repeat that, please.", "What did you say?", "Sorry, what did you say?", "I'm not sure I understood you.", "Can you say that a different way?", "You might have to say that a different way.", "Can you please say that another way?", "Please rephrase your request."]
-    utterance = random.choice(utterances)
-    data = {'utterance': utterance}
+    #utterances = ["Sorry, I didn't catch that.", "Sorry, I don't understand.", "Huhm, can you repeat that?", "Can you repeat that?", "I don't understand.", "Huh, I don't understand.", "Huh, can you repeat that?", "Please repeat that.", "Sorry, repeat that, please.", "What did you say?", "Sorry, what did you say?", "I'm not sure I understood you.", "Can you say that a different way?", "You might have to say that a different way.", "Can you please say that another way?", "Please rephrase your request."]
+    #utterance = random.choice(utterances)
+    #data = {'utterance': utterance}
+    data = {'utterance': dialog.get('not.loaded')}
     ws.emit(Message('speak', data))
 
 
@@ -135,8 +151,10 @@ def main():
     Configuration.init(ws)
     loop = RecognizerLoop()
     loop.on('recognizer_loop:utterance', handle_utterance)
+    loop.on('recognizer_loop:speech.recognition.unknown', handle_unknown)
     loop.on('speak', handle_speak)
     loop.on('recognizer_loop:record_begin', handle_record_begin)
+    loop.on('recognizer_loop:awoken', handle_awoken)
     loop.on('recognizer_loop:wakeword', handle_wakeword)
     loop.on('recognizer_loop:record_end', handle_record_end)
     loop.on('recognizer_loop:no_internet', handle_no_internet)
@@ -156,7 +174,7 @@ def main():
 
     try:
         loop.run()
-    except KeyboardInterrupt, e:
+    except KeyboardInterrupt as e:
         LOG.exception(e)
         sys.exit()
 
